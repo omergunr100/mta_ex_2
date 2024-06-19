@@ -1,10 +1,10 @@
 import os
-import typing
+from typing import Tuple, Dict, TypeVar
 
 import pandas as pd
 
 
-def process_data(data_dir: str, save_dir: str, tokenizer: callable[str, list[str]]) -> typing.Tuple[pd.DataFrame, pd.DataFrame]:
+def process_data(data_dir: str, save_dir: str, tokenizer) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # extract the data from the files into a dictionary
     data = dict()
     for dataset in ["train", "test"]:
@@ -32,15 +32,24 @@ def process_data(data_dir: str, save_dir: str, tokenizer: callable[str, list[str
     return df_train, df_test
 
 
-def create_vocabulary(dfs: list[pd.DataFrame]) -> typing.Dict[str, int]:
+def create_vocabulary(dfs: list[pd.DataFrame]) -> Dict[str, int]:
     vocab = set()
     tokens: list[str]
     for df in dfs:
         for tokens in df['tokens']:
             vocab.update(tokens)
 
-    vocabulary: typing.Dict[str, int] = dict()
+    vocabulary: Dict[str, int] = dict()
     for i, token in enumerate(vocab):
         vocabulary[token] = i
 
     return vocabulary
+
+
+T = TypeVar('T')
+
+
+def get_ngrams(lst: list[T], max_size: int) -> list[list[T]]:
+    if len(lst) < 2:
+        return []
+    return [lst[i:i+max_size] for i in range(min(0, len(lst) - max_size))] + [lst[:i] for i in range(2, min(len(lst), max_size))]

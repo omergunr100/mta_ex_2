@@ -1,7 +1,4 @@
 from torch import nn
-from torch.utils.data import DataLoader
-from torch.optim import Optimizer
-from torch.nn.modules.loss import _Loss as Loss
 
 
 class MyRnn(nn.Module):
@@ -20,31 +17,15 @@ class MyRnn(nn.Module):
         # defining the embedding layer
         self.embedding = nn.Embedding(vocab_dim, embedding_dim)
         # defining the lstm layer
-        self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_size, num_layers=n_layers, dropout=dropout)
+        self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_size, batch_first=True, num_layers=n_layers,
+                            dropout=dropout)
         # defining fully connected layer
         self.fc = nn.Linear(hidden_size, output_size)
 
-    def forward(self, batch, hidden):
+    def forward(self, batch):
         # run the batch through the layers
         embeddings = self.embedding(batch)
-        print(embeddings)
-        lstm_out, hidden = self.lstm(embeddings, hidden)
-        output = self.fc(lstm_out)
+        lstm_out, _ = self.lstm(embeddings)
+        output = self.fc(lstm_out[:, -1, :])
         # return the output and new hidden state
-        return output, hidden
-
-    def create_hidden(self, batch_size):
-        # create the hidden state
-        weight = next(self.parameters()).data
-        return (weight.new(self.n_layers, batch_size, self.hidden_size).zero_(),
-                weight.new(self.n_layers, batch_size, self.hidden_size).zero_())
-
-
-def train_my_rnn(model: MyRnn, dataloader: DataLoader, loss_function: Loss, optimizer: Optimizer) -> MyRnn:
-    # set model to training mode for the duration of the training
-    with model.train():
-        for i, batch in enumerate(dataloader):
-            # zero the gradient each batch
-            optimizer.zero_grad()
-
-    return model
+        return output
