@@ -1,6 +1,9 @@
 import time
+from pathlib import Path
 
+import pandas as pd
 import torch
+import nltk
 from nltk.tokenize import word_tokenize
 from torch import optim, nn
 from torch.nn.functional import pad
@@ -68,17 +71,31 @@ if __name__ == '__main__':
     # constants
     data_dir = "data/original/aclImdb"
     save_dir = "data/processed"
-    # process the data into dataframes
-    df_train, df_test = process_data(data_dir=data_dir, save_dir=save_dir,
-                                     tokenizer=word_tokenize)
+    # check if the files exist
+    train_data_file = Path(f"{save_dir}/train.csv")
+    test_data_file = Path(f"{save_dir}/test.csv")
+    found = train_data_file.is_file() and test_data_file.is_file() 
+    if found:
+        # read files
+        df_train, df_test = pd.read_csv(train_data_file), pd.read_csv(test_data_file)
+    else:
+        # process the data into dataframes
+        nltk.download('punkt')
+        df_train, df_test = process_data(data_dir=data_dir, save_dir=save_dir,
+                                         tokenizer=word_tokenize)
     # create the vocabulary object
+    print("Creating vocabulary")
     vocabulary = create_vocabulary([df_train, df_test])
+    print("Finished creating vocabulary")
     # transform the tokens in the dataframes to their numeric equivalents
+    print("Transforming tokens to numeric")
     df_train['numeric'] = df_train['tokens'].apply(lambda tokens: [vocabulary[token] for token in tokens])
     df_test['numeric'] = df_test['tokens'].apply(lambda tokens: [vocabulary[token] for token in tokens])
+    print("Finished transforming tokens to numeric")
     # save with numeric versions of tokens
-    df_train.to_csv(f"{save_dir}/train.csv")
-    df_test.to_csv(f"{save_dir}/test.csv")
+    if not found:
+        df_train.to_csv(f"{save_dir}/train.csv")
+        df_test.to_csv(f"{save_dir}/test.csv")
     # create the dataset and loader
     print("Creating ngrams")
     numeric: list[int]
