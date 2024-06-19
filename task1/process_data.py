@@ -32,11 +32,12 @@ def process_data(data_dir: str, save_dir: str, tokenizer: callable[str, list[str
     return df_train, df_test
 
 
-def create_vocabulary(df: pd.DataFrame) -> typing.Dict[str, int]:
+def create_vocabulary(dfs: list[pd.DataFrame]) -> typing.Dict[str, int]:
     vocab = set()
     tokens: list[str]
-    for tokens in df['tokens']:
-        vocab.update(tokens)
+    for df in dfs:
+        for tokens in df['tokens']:
+            vocab.update(tokens)
 
     vocabulary: typing.Dict[str, int] = dict()
     for i, token in enumerate(vocab):
