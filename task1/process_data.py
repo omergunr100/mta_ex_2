@@ -56,14 +56,8 @@ def get_ngrams(lst: list[T], max_size: int) -> list[list[T]]:
     if len(lst) < 2 or max_size < 2:
         return []
 
-    ngrams = []
-    num_tokens = len(lst)
-    for i in range(num_tokens):
-        for j in range(i + 2, min(i + max_size, num_tokens) + 1):
-            ngrams.append(lst[i:j])
-    return ngrams
-    # return [lst[i:i + max_size] for i in range(min(0, len(lst) - max_size))] + [lst[:i] for i in
-    #                                                                             range(2, min(len(lst), max_size))]
+    return [lst[i:i + max_size] for i in range(min(0, len(lst) - max_size))] + [lst[:i] for i in
+                                                                                range(2, min(len(lst), max_size))]
 
 
 def create_dataset(ngrams: list[list[T]]) -> Tuple[TensorDataset, int]:
