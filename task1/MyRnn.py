@@ -1,4 +1,5 @@
 from torch import nn
+from torch.types import Device
 
 
 class MyRnn(nn.Module):
@@ -22,10 +23,16 @@ class MyRnn(nn.Module):
         # defining fully connected layer
         self.fc = nn.Linear(hidden_size, output_size)
 
-    def forward(self, batch):
+    def create_hidden(self, batch_size: int, device: Device):
+        weights = next(self.parameters()).data
+        hidden = (weights.new(self.n_layers, batch_size, self.hidden_size).zero_().to(device),
+                  weights.new(self.n_layers, batch_size, self.hidden_size).zero_().to(device))
+        return hidden
+
+    def forward(self, batch, hidden):
         # run the batch through the layers
         embeddings = self.embedding(batch)
-        lstm_out, _ = self.lstm(embeddings)
+        lstm_out, hidden = self.lstm(embeddings, hidden)
         output = self.fc(lstm_out[:, -1, :])
         # return the output and new hidden state
-        return output
+        return output, hidden
