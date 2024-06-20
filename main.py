@@ -1,32 +1,38 @@
 import time
 from pathlib import Path
 
+import nltk
 import pandas as pd
 import torch
-import nltk
 from nltk.tokenize import word_tokenize
 from torch import optim, nn
-from torch.nn.functional import pad
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, random_split
 
 from task1.MyRnn import MyRnn
-from task1.process_data import process_data, create_vocabulary, get_ngrams
+from task1.process_data import process_data, create_vocabulary, get_ngrams, create_dataset
 
 
-def train_my_rnn(model: MyRnn, dataloader: DataLoader, loss_function: _Loss, optimizer: Optimizer, epochs: int,
-                 device: torch.device) -> tuple[MyRnn, list[float], list[float]]:
+def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataloader: DataLoader,
+                 loss_function: _Loss, optimizer: Optimizer, epochs: int,
+                 device: torch.device) -> tuple[MyRnn, list[float], list[float], list[float], list[float]]:
+    print("--------------------------------------------------")
     # initialize result holders
-    accuracies = []
-    losses = []
+    train_accuracies = []
+    train_losses = []
+    validation_accuracies = []
+    validation_losses = []
     # set model to training mode for the duration of the training
     for epoch in range(epochs):
         start = time.time()
         model.train()
         batch_X: torch.Tensor
         batch_y: torch.Tensor
-        for batch_X, batch_y in dataloader:
+        batch_train_losses = []
+        epoch_train_correct_predictions = 0
+        epoch_train_total_predictions = 0
+        for batch_X, batch_y in train_dataloader:
             # move the data to the selected device
             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
             # zero the gradient each batch
@@ -35,36 +41,54 @@ def train_my_rnn(model: MyRnn, dataloader: DataLoader, loss_function: _Loss, opt
             outputs = model(batch_X)
             # calculate the loss
             loss: torch.Tensor = loss_function(outputs, batch_y)
+            batch_train_losses.append(loss.item())
             # propagate the loss backwards
             b = loss.backward()
             # update the weights
             optimizer.step()
+            # add the correct predictions
+            epoch_train_correct_predictions += (outputs.argmax(dim=1) == batch_y).sum().item()
+            # add the total predictions
+            epoch_train_total_predictions += len(batch_y)
 
         # log the epoch time
         epoch_time = time.time()
         # add the final loss in the epoch to the list
-        losses.append(loss.item())
-        # calculate the accuracy and loss for the epoch
-        correct_predictions = 0
-        total_predictions = 0
+        train_losses.append(sum(batch_train_losses) / len(batch_train_losses))
+        # add the final accuracy in the epoch to the list
+        train_accuracies.append(epoch_train_correct_predictions / epoch_train_total_predictions)
+        # calculate the accuracy and loss on the validation set
+        batch_validation_losses = []
+        validation_correct_predictions = 0
+        validation_total_predictions = 0
+        model.eval()
         with torch.no_grad():
             batch_X: torch.Tensor
             batch_y: torch.Tensor
-            for batch_X, batch_y in dataloader:
+            for batch_X, batch_y in validation_dataloader:
                 # move the data to the selected device
                 batch_X, batch_y = batch_X.to(device), batch_y.to(device)
                 # add the batch size to the total predictions
-                total_predictions += len(batch_y)
+                validation_total_predictions += len(batch_y)
                 # get the predictions
-                predictions = model(batch_X).argmax(dim=1)
+                outputs = model(batch_X)
+                # calculate the loss
+                loss: torch.Tensor = loss_function(outputs, batch_y)
+                batch_validation_losses.append(loss.item())
                 # add the correct predictions
-                correct_predictions += (predictions == batch_y).sum().item()
+                validation_correct_predictions += (outputs.argmax(dim=1) == batch_y).sum().item()
         # get the accuracy of the epoch and put it in the accuracies list
-        accuracies.append(correct_predictions / total_predictions)
+        validation_accuracies.append(validation_correct_predictions / validation_total_predictions)
+        # get the loss of the epoch and put it in the losses list
+        validation_losses.append(sum(batch_validation_losses) / len(batch_validation_losses))
         # print the results
-        print(f"Epoch: {epoch + 1}, Accuracy: {accuracies[-1]}, Loss: {losses[-1]}, Time: {int(epoch_time - start)} (+{int(time.time() - epoch_time)}) seconds")
+        print(f"Epoch: {epoch + 1}")
+        print(f"Train Accuracy: {train_accuracies[-1]}, Train Loss: {train_losses[-1]}")
+        print(f"Validation Accuracy: {validation_accuracies[-1]}, Validation Loss: {validation_losses[-1]}")
+        print(f"Time: {int(epoch_time - start)} (+{int(time.time() - epoch_time)}) seconds")
+        print("--------------------------------------------------")
 
-    return model, accuracies, losses
+    return model, train_accuracies, train_losses, validation_accuracies, validation_losses
 
 
 if __name__ == '__main__':
@@ -99,28 +123,24 @@ if __name__ == '__main__':
     # create the dataset and loader
     print("Creating ngrams")
     numeric: list[int]
-    ngrams = [ngram for numeric in df_train['numeric'] for ngram in get_ngrams(numeric, 8)]
+    train_ngrams = [ngram for numeric in df_train['numeric'] for ngram in get_ngrams(numeric, 3)]
+    print("Finished creating train ngrams")
+    test_ngrams = [ngram for numeric in df_test['numeric'] for ngram in get_ngrams(numeric, 3)]
     print("Finished creating ngrams")
-    # get and modify X to be ready for training
-    print("Creating X")
-    X = [ngram[:-1] for ngram in ngrams]
-    max_length_x = max(len(x) for x in X)
-    padded_X = torch.stack([pad(torch.tensor(x), (max_length_x - len(x), 0), value=0) for x in X])
-    print("Finished creating X")
-    # get and modify y to be ready for training
-    print("Creating y")
-    y = torch.tensor([ngram[-1] for ngram in ngrams])
-    print("Finished creating y")
+    # create the tensor datasets
+    batch_size = 64
+    dataset, train_max_length = create_dataset(train_ngrams)
+    test_dataset, test_max_length = create_dataset(test_ngrams)
+    train_dataset, validation_dataset = random_split(dataset, [0.8, 0.2])
     # delete the dataframes to save some memory
     del df_train
     del df_test
     # initialize the dataset and loader
-    print("Creating dataset and loader")
-    batch_size = 64
-    train_dataset = TensorDataset(padded_X, y)
+    print("Creating dataloaders")
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True)
-    print("Finished creating dataset and loader")
-    # delete the dataframes to save memory
+    validation_dataloader = DataLoader(dataset=validation_dataset, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataLoader(dataset=test_dataset, batch_size=batch_size, shuffle=False)
+    print("Finished creating dataloaders")
     # create instance of my rnn
     print("Creating model")
     vocab_size = len(vocabulary)
@@ -134,9 +154,10 @@ if __name__ == '__main__':
     print("Finished moving model to device: ", device)
     # train the model
     print("Training model")
-    epochs = 20
+    epochs = 50
     optimizer = optim.Adam(model.parameters(), lr=0.0009)
     loss_function = nn.CrossEntropyLoss()
-    model, accuracies, losses = train_my_rnn(model, train_dataloader, loss_function, optimizer, epochs, device)
+    model, train_accuracies, train_losses, validation_accuracies, validation_losses \
+        = train_my_rnn(model, train_dataloader, validation_dataloader, loss_function, optimizer, epochs, device)
     torch.save(model.state_dict(), "model.pth")
     print("Finished training model")
