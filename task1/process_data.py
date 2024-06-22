@@ -1,5 +1,5 @@
 import os
-from typing import Tuple, Dict, TypeVar
+from typing import Tuple, Dict, TypeVar, Generator, Any
 
 import pandas as pd
 import torch
@@ -52,18 +52,22 @@ def create_vocabulary(dfs: list[pd.DataFrame]) -> Dict[str, int]:
 T = TypeVar('T')
 
 
-def get_ngrams(lst: list[T], max_size: int) -> list[list[T]]:
-    if len(lst) < 2 or max_size < 2:
-        return []
+def get_ngrams(lsts: list[list[T]], max_size: int):
+    for lst in lsts:
+        if len(lst) < 2 or max_size < 2:
+            yield list[T]()
 
-    return [lst[i:i + max_size] for i in range(min(0, len(lst) - max_size))] + [lst[:i] for i in
-                                                                                range(2, min(len(lst), max_size))]
+        for i in range(max(0, len(lst) - max_size)):
+            yield lst[i:i + max_size]
 
 
-def create_dataset(ngrams: list[list[T]]) -> Tuple[TensorDataset, int]:
-    X = [ngram[:-1] for ngram in ngrams]
+def create_dataset(ngrams: Generator[list[T], Any, None]) -> Tuple[TensorDataset, int]:
+    X = [ngram[:-1] for ngram in ngrams if ngram]
+    print("extracted X")
     max_length_x = max(len(x) for x in X)
     padded_X = torch.stack([pad(torch.tensor(x), (max_length_x - len(x), 0), value=0) for x in X])
-    y = torch.tensor([ngram[-1] for ngram in ngrams])
+    del X
+    y = torch.tensor([ngram[-1] for ngram in ngrams if ngram])
     dataset = TensorDataset(padded_X, y)
+    print("created dataset")
     return dataset, max_length_x

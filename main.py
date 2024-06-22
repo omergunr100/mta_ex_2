@@ -8,6 +8,7 @@ from nltk.tokenize import word_tokenize
 from torch import optim, nn
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
+from torch.types import Device
 from torch.utils.data import DataLoader, random_split
 
 from task1.MyRnn import MyRnn
@@ -16,7 +17,7 @@ from task1.process_data import process_data, create_vocabulary, get_ngrams, crea
 
 def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataloader: DataLoader,
                  loss_function: _Loss, optimizer: Optimizer, epochs: int,
-                 device: torch.device) -> tuple[MyRnn, list[float], list[float], list[float], list[float]]:
+                 device: Device) -> tuple[MyRnn, list[float], list[float], list[float], list[float]]:
     print("--------------------------------------------------")
     # initialize result holders
     train_accuracies = []
@@ -122,16 +123,20 @@ if __name__ == '__main__':
         df_test.to_csv(f"{save_dir}/test.csv")
     # create the dataset and loader
     print("Creating ngrams")
-    numeric: list[int]
-    train_ngrams = [ngram for numeric in df_train['numeric'] for ngram in get_ngrams(numeric, 3)]
-    print("Finished creating train ngrams")
-    test_ngrams = [ngram for numeric in df_test['numeric'] for ngram in get_ngrams(numeric, 3)]
+    numeric_train: list[list[int]] = df_train['numeric'].to_list()
+    numeric_test: list[list[int]] = df_test['numeric'].to_list()
+    train_ngrams = get_ngrams(numeric_train, 2)
+    test_ngrams = get_ngrams(numeric_test, 2)
     print("Finished creating ngrams")
     # create the tensor datasets
     batch_size = 64
     dataset, train_max_length = create_dataset(train_ngrams)
+    torch.save(dataset, "dataset.pth")
     test_dataset, test_max_length = create_dataset(test_ngrams)
+    torch.save(test_dataset, "test_dataset.pth")
     train_dataset, validation_dataset = random_split(dataset, [0.8, 0.2])
+    torch.save(train_dataset, "train_dataset.pth")
+    torch.save(validation_dataset, "validation_dataset.pth")
     # delete the dataframes to save some memory
     del df_train
     del df_test
