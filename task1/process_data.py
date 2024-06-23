@@ -1,10 +1,11 @@
 import os
-from typing import Tuple, Dict, TypeVar, Generator, Any
+from collections import defaultdict
+from typing import Tuple, Dict
 
 import pandas as pd
 import torch
 from torch.nn.functional import pad
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset
 
 
 def process_data(data_dir: str, save_dir: str, tokenizer) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -35,39 +36,24 @@ def process_data(data_dir: str, save_dir: str, tokenizer) -> Tuple[pd.DataFrame,
     return df_train, df_test
 
 
-def create_vocabulary(dfs: list[pd.DataFrame]) -> Dict[str, int]:
+def create_vocabulary(dfs: list[pd.DataFrame], specials: list[str] = None) -> Dict[str, int]:
     vocab = set()
     tokens: list[str]
     for df in dfs:
         for tokens in df['tokens']:
             vocab.update(tokens)
 
-    vocabulary: Dict[str, int] = dict()
-    for i, token in enumerate(vocab):
-        vocabulary[token] = i + 1
+    vocabulary: defaultdict[str, int] = defaultdict()
+    for i, token in enumerate([*specials, *vocab]):
+        vocabulary[token] = i
+
+    vocabulary.default_factory = lambda: vocabulary["<UNK>"]
 
     return vocabulary
 
 
-T = TypeVar('T')
-
-
-def get_ngrams(lsts: list[list[T]], max_size: int):
-    for lst in lsts:
-        if len(lst) < 2 or max_size < 2:
-            yield list[T]()
-
-        for i in range(max(0, len(lst) - max_size)):
-            yield lst[i:i + max_size]
-
-
-def create_dataset(ngrams: Generator[list[T], Any, None]) -> Tuple[TensorDataset, int]:
-    X = [ngram[:-1] for ngram in ngrams if ngram]
-    print("extracted X")
-    max_length_x = max(len(x) for x in X)
-    padded_X = torch.stack([pad(torch.tensor(x), (max_length_x - len(x), 0), value=0) for x in X])
-    del X
-    y = torch.tensor([ngram[-1] for ngram in ngrams if ngram])
-    dataset = TensorDataset(padded_X, y)
-    print("created dataset")
-    return dataset, max_length_x
+def create_dataset(data_list: list[list[int]]) -> TensorDataset:
+    lengths = torch.IntTensor([len(x) for x in data_list])
+    max_length = lengths.max().item()
+    padded_data = torch.stack([pad(torch.tensor(x), (max_length - len(x), 0), value=0) for x in data_list])
+    return TensorDataset(lengths, padded_data)

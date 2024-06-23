@@ -1,4 +1,7 @@
-from torch import nn
+from typing import Tuple
+
+import torch
+from torch import nn, IntTensor, Tensor
 from torch.types import Device
 
 
@@ -16,7 +19,7 @@ class MyRnn(nn.Module):
         self.dropout = dropout
 
         # defining the embedding layer
-        self.embedding = nn.Embedding(vocab_dim, embedding_dim)
+        self.embedding = nn.Embedding(vocab_dim, embedding_dim, padding_idx=0)
         # defining the lstm layer
         self.lstm = nn.LSTM(input_size=embedding_dim, hidden_size=hidden_size, batch_first=True, num_layers=n_layers,
                             dropout=dropout)
@@ -29,10 +32,18 @@ class MyRnn(nn.Module):
                   weights.new(self.n_layers, batch_size, self.hidden_size).zero_().to(device))
         return hidden
 
-    def forward(self, batch, hidden):
+    def forward(self, batch: Tuple[IntTensor, Tensor], hidden):
+        lengths, data = batch
         # run the batch through the layers
-        embeddings = self.embedding(batch)
+        embeddings = self.embedding(data)
+        # run the lstm over the embeddings
+        lstm_out: Tensor
         lstm_out, hidden = self.lstm(embeddings, hidden)
-        output = self.fc(lstm_out[:, -1, :])
-        # return the output and new hidden state
-        return output, hidden
+        # return the output or classify it
+        if self.training:
+            return self.fc(lstm_out[:, 0:-2, :])
+        else:
+            return self.predict(lstm_out)
+
+    def predict(self, lstm_out: Tensor, index: int = -1) -> Tensor:
+        return self.fc(lstm_out[:, index, :])
