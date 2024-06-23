@@ -1,3 +1,4 @@
+import sys
 import time
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from torch.optim import Optimizer
 from torch.types import Device
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
+import matplotlib.pyplot as plt 
 
 from task1.MyRnn import MyRnn
 from task1.process_data import process_data, create_vocabulary, create_dataset
@@ -39,7 +41,7 @@ def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataload
         batch_train_losses = []
         epoch_train_correct_predictions = 0
         epoch_train_total_predictions = 0
-        for batch_lengths, batch_data in tqdm(train_dataloader, unit="item", unit_scale=train_dataloader.batch_size):
+        for batch_lengths, batch_data in tqdm(train_dataloader, unit="item", unit_scale=train_dataloader.batch_size, file=sys.stdout):
             # zero the gradient each batch
             optimizer.zero_grad()
             # fix data for the model
@@ -49,18 +51,27 @@ def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataload
             outputs = model((batch_lengths, batch_data), model.create_hidden(train_dataloader.batch_size, device))
             # calculate the loss
             packed = pack_padded_sequence(batch_data, batch_lengths, batch_first=True, enforce_sorted=False)
-            unpacked, _ = pad_packed_sequence(packed, batch_first=True)
-            loss: Tensor = loss_function(outputs.transpose(1, 2), unpacked[:, 1:-1])
+            unpacked, batch_lengths = pad_packed_sequence(packed, batch_first=True)
+            loss: Tensor = loss_function(outputs[:, :-2, :].transpose(1, 2), unpacked[:, 1:-1])
             batch_train_losses.append(loss.item())
             # propagate the loss backwards
             loss.backward()
             # update the weights
             optimizer.step()
+            # process the predictions
+            correct = 0
+            count = 0
+            for i in range(len(outputs)):
+                relevant_outputs = outputs[i, :-2]
+                relevant_unpacked = unpacked[i, 1:-1]
+                equals = (relevant_outputs.argmax(dim=1) == relevant_unpacked)
+                current_correct = equals.sum().item()
+                correct += current_correct
+                count += equals.size(dim=0)
             # add the correct predictions
-            epoch_train_correct_predictions += (outputs.argmax(dim=2) == unpacked[:, 1:-1]).sum().item()
+            epoch_train_correct_predictions += correct
             # add the total predictions
-            epoch_train_total_predictions += batch_lengths.sum().item()
-
+            epoch_train_total_predictions += count
         # log the epoch time
         epoch_time = time.time()
         # add the final loss in the epoch to the list
@@ -73,7 +84,8 @@ def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataload
         validation_total_predictions = 0
         model.eval()
         with torch.no_grad():
-            for batch_lengths, batch_data in tqdm(validation_dataloader, unit="item", unit_scale=validation_dataloader.batch_size):
+            for batch_lengths, batch_data in tqdm(validation_dataloader, unit="item",
+                                                  unit_scale=validation_dataloader.batch_size, file=sys.stdout):
                 # fix data for the model
                 batch_data = batch_data.to(device)
                 # get the predictions
@@ -82,14 +94,24 @@ def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataload
                 outputs: Tensor
                 outputs = model((batch_lengths, batch_data), model.create_hidden(train_dataloader.batch_size, device))
                 # calculate the loss
-                loss: Tensor = loss_function(outputs.transpose(1, 2), unpacked[:, 1:-1])
+                loss: Tensor = loss_function(outputs[:, :-2, :].transpose(1, 2), unpacked[:, 1:-1])
                 batch_train_losses.append(loss.item())
-                # add the batch size to the total predictions
-                validation_total_predictions += batch_lengths.sum().item()
+                # process the predictions
+                correct = 0
+                count = 0
+                for i in range(len(outputs)):
+                    relevant_outputs = outputs[i, :-2]
+                    relevant_unpacked = unpacked[i, 1:-1]
+                    equals = (relevant_outputs.argmax(dim=1) == relevant_unpacked)
+                    current_correct = equals.sum().item()
+                    correct += current_correct
+                    count += equals.size(dim=0)
+                # add the total predictions
+                validation_total_predictions += count
+                # add the correct predictions
+                validation_correct_predictions += correct
                 # add the loss to the list
                 batch_validation_losses.append(loss.item())
-                # add the correct predictions
-                validation_correct_predictions += (outputs.argmax(dim=2) == unpacked[:, 1:-1]).sum().item()
         # get the accuracy of the epoch and put it in the accuracies list
         validation_accuracies.append(validation_correct_predictions / validation_total_predictions)
         # get the loss of the epoch and put it in the losses list
@@ -185,10 +207,27 @@ if __name__ == '__main__':
     print("Finished moving model to device: ", device)
     # train the model
     print("Training model")
-    epochs = 50
+    epochs = 8
     optimizer = optim.Adam(model.parameters(), lr=0.0009)
     loss_function = nn.CrossEntropyLoss()
     model, train_accuracies, train_losses, validation_accuracies, validation_losses \
         = train_my_rnn(model, train_dataloader, validation_dataloader, loss_function, optimizer, epochs, device)
     torch.save(model.state_dict(), "model.pth")
     print("Finished training model")
+    # plot the results
+    print("Plotting results")
+    plt.plot(train_accuracies, label="Train")
+    plt.plot(validation_accuracies, label="Validation")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.legend(["Train", "Validation"], loc="upper left")
+    plt.title("Accuracy")
+    plt.show()
+    plt.plot(train_losses, label="Train")
+    plt.plot(validation_losses, label="Validation")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend(["Train", "Validation"], loc="upper left")
+    plt.title("Loss")
+    plt.show()
+    print("Finished plotting results")
