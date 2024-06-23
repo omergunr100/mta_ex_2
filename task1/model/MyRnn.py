@@ -44,7 +44,7 @@ class MyRnn(nn.Module):
         # unpack the packed sequences
         lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
         # return the output of the lstm
-        return self.fc(lstm_out)
+        return self.fc(lstm_out), hidden
 
     def predict(self, lstm_out: Tensor, index: int = -1) -> Tensor:
         return self.fc(lstm_out[:, index, :])
