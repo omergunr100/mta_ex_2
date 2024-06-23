@@ -2,6 +2,7 @@ from typing import Tuple
 
 import torch
 from torch import nn, IntTensor, Tensor
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.types import Device
 
 
@@ -36,14 +37,14 @@ class MyRnn(nn.Module):
         lengths, data = batch
         # run the batch through the layers
         embeddings = self.embedding(data)
+        # pack the padded sequences
+        packed = pack_padded_sequence(embeddings, lengths, batch_first=True, enforce_sorted=False)
         # run the lstm over the embeddings
-        lstm_out: Tensor
-        lstm_out, hidden = self.lstm(embeddings, hidden)
-        # return the output or classify it
-        if self.training:
-            return self.fc(lstm_out[:, 0:-2, :])
-        else:
-            return self.predict(lstm_out)
+        lstm_out, hidden = self.lstm(packed, hidden)
+        # unpack the packed sequences
+        lstm_out, _ = pad_packed_sequence(lstm_out, batch_first=True)
+        # return the output of the lstm
+        return self.fc(lstm_out[:, 0:-2, :])
 
     def predict(self, lstm_out: Tensor, index: int = -1) -> Tensor:
         return self.fc(lstm_out[:, index, :])
