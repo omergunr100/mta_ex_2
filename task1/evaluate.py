@@ -12,8 +12,7 @@ from tqdm import tqdm
 from task1.model.MyRnn import MyRnn
 
 
-def epoch_accuracy_loss(model: MyRnn, dataloader: DataLoader, device: Device, loss_function: _Loss) -> Tuple[
-    list[float], list[float]]:
+def epoch_accuracy_loss(model: MyRnn, dataloader: DataLoader, device: Device, loss_function: _Loss) -> Tuple[list[float], list[float]]:
     # calculate the accuracy and loss on the validation set
     accuracies = []
     losses = []
@@ -60,4 +59,8 @@ def epoch_accuracy_loss(model: MyRnn, dataloader: DataLoader, device: Device, lo
 
 
 def evaluate_model(model: MyRnn, dataloader: DataLoader, device: Device):
-    pass
+    accuracies, losses = epoch_accuracy_loss(model, dataloader, device, torch.nn.CrossEntropyLoss())
+    accuracy = torch.tensor(accuracies).mean()
+    loss = torch.tensor(losses).mean()
+    perplexity = torch.exp(loss)
+    return accuracy.item(), loss.item(), perplexity.item()

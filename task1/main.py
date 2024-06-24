@@ -8,6 +8,7 @@ from nltk.tokenize import word_tokenize
 from torch import optim, nn
 from torch.utils.data import DataLoader, random_split
 
+from task1.evaluate import evaluate_model
 from task1.model.MyRnn import MyRnn
 from task1.process_data import process_data, create_vocabulary, create_dataset
 from task1.train import train_my_rnn
@@ -19,8 +20,8 @@ def does_file_exist(file: str) -> bool:
 
 if __name__ == '__main__':
     # constants
-    data_dir = "data/original/aclImdb"
-    save_dir = "data/processed"
+    data_dir = "task1/data/original/aclImdb"
+    save_dir = "task1/data/processed"
     # check if the files exist
     train_data_file = Path(f"{save_dir}/train.csv")
     test_data_file = Path(f"{save_dir}/test.csv")
@@ -89,8 +90,11 @@ if __name__ == '__main__':
     # create instance of my rnn
     print("Creating model")
     vocab_size = len(vocabulary)
+    model_exists = does_file_exist("task1/model/model.pth")
     model = MyRnn(vocab_dim=vocab_size, output_size=vocab_size, embedding_dim=100, n_layers=2, dropout=0.5,
                   hidden_size=100)
+    if model_exists:
+        model.load_state_dict(torch.load("task1/model/model.pth"))
     print("Finished creating model")
     # move model to gpu if available
     print("Moving model to device")
@@ -98,32 +102,37 @@ if __name__ == '__main__':
     model.to(device)
     print("Finished moving model to device: ", device)
     # train the model
-    print("Training model")
-    epochs = 8
-    optimizer = optim.Adam(model.parameters(), lr=0.0009)
-    loss_function = nn.CrossEntropyLoss()
-    model, train_accuracies, train_losses, validation_accuracies, validation_losses \
-        = train_my_rnn(model, train_dataloader, validation_dataloader, loss_function, optimizer, epochs, device)
-    torch.save(model.state_dict(), "model/model.pth")
-    print("Finished training model")
+    if not model_exists:
+        print("Training model")
+        epochs = 8
+        optimizer = optim.Adam(model.parameters(), lr=0.0009)
+        loss_function = nn.CrossEntropyLoss()
+        model, train_accuracies, train_losses, validation_accuracies, validation_losses \
+            = train_my_rnn(model, train_dataloader, validation_dataloader, loss_function, optimizer, epochs, device)
+        torch.save(model.state_dict(), "task1/model/model.pth")
+        print("Finished training model")
     # plot the results
-    print("Plotting results")
-    plt.plot(train_accuracies, label="Train")
-    plt.plot(validation_accuracies, label="Validation")
-    plt.xlabel("Epoch")
-    plt.ylabel("Accuracy")
-    plt.legend(["Train", "Validation"], loc="upper left")
-    plt.title("Accuracy")
-    plt.imsave("accuracy_graph.png")
-    plt.show()
-    plt.plot(train_losses, label="Train")
-    plt.plot(validation_losses, label="Validation")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend(["Train", "Validation"], loc="upper left")
-    plt.title("Loss")
-    plt.imsave("loss_graph.png")
-    plt.show()
-    print("Finished plotting results")
+    if not model_exists:
+        print("Plotting results")
+        plt.plot(train_accuracies, label="Train")
+        plt.plot(validation_accuracies, label="Validation")
+        plt.xlabel("Epoch")
+        plt.ylabel("Accuracy")
+        plt.legend(["Train", "Validation"], loc="upper left")
+        plt.title("Accuracy")
+        plt.savefig("task1/accuracy_graph.png")
+        plt.show()
+        plt.plot(train_losses, label="Train")
+        plt.plot(validation_losses, label="Validation")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend(["Train", "Validation"], loc="upper left")
+        plt.title("Loss")
+        plt.savefig("task1/loss_graph.png")
+        plt.show()
+        print("Finished plotting results")
     # test the model
-    
+    print("Testing model")
+    acc, loss, perplexity = evaluate_model(model, test_dataloader, device)
+    print(f"Test Accuracy: {acc}, Loss: {loss}, Perplexity: {perplexity}")
+    print("Finished testing model")
