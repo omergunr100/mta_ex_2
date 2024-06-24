@@ -1,7 +1,6 @@
 import sys
 from time import time
 
-import torch
 from torch import IntTensor, Tensor
 from torch.nn.modules.loss import _Loss
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
