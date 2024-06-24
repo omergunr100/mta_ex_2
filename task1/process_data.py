@@ -36,18 +36,16 @@ def process_data(data_dir: str, save_dir: str, tokenizer) -> Tuple[pd.DataFrame,
     return df_train, df_test
 
 
-def create_vocabulary(dfs: list[pd.DataFrame], specials: list[str] = None) -> Dict[str, int]:
+def create_vocabulary(dfs: list[pd.DataFrame], specials: list[str] = None) -> dict[str, int]:
     vocab = set()
     tokens: list[str]
     for df in dfs:
         for tokens in df['tokens']:
             vocab.update(tokens)
 
-    vocabulary: defaultdict[str, int] = defaultdict()
+    vocabulary = dict()
     for i, token in enumerate([*specials, *vocab]):
         vocabulary[token] = i
-
-    vocabulary.default_factory = lambda: vocabulary["<UNK>"]
 
     return vocabulary
 

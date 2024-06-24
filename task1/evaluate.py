@@ -30,7 +30,7 @@ def epoch_accuracy_loss(model: MyRnn, dataloader: DataLoader, device: Device, lo
             unpacked, batch_lengths = pad_packed_sequence(packed, batch_first=True)
             outputs: Tensor
             outputs, _ = model((batch_lengths, batch_data),
-                               model.create_hidden(dataloader.batch_size, device))
+                               model.create_hidden(dataloader.batch_size, device), predict=False)
             # calculate the loss
             loss: Tensor = loss_function(outputs[:, :-2, :].transpose(1, 2), unpacked[:, 1:-1])
             losses.append(loss.item())

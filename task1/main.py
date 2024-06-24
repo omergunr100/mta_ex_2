@@ -1,3 +1,5 @@
+import json
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -36,13 +38,20 @@ if __name__ == '__main__':
                                          tokenizer=word_tokenize)
     # create the vocabulary object
     print("Creating vocabulary")
-    vocabulary = create_vocabulary([df_train, df_test], ["<PAD>", "<UNK>"])
+    vocab_file = Path(f"{save_dir}/vocabulary.json")
+    if vocab_file.is_file():
+        with open(vocab_file, "r", encoding="utf-8") as vocabulary_file:
+            vocabulary = json.load(vocabulary_file)
+    else:
+        vocabulary = create_vocabulary([df_train, df_test], ["<PAD>", "<UNK>"])
+        with open(f"{save_dir}/vocabulary.json", "w", encoding="utf-8") as vocabulary_file:
+            json.dump(vocabulary, vocabulary_file)
     print(f"vocabulary size: {len(vocabulary)}")
     print("Finished creating vocabulary")
     # transform the tokens in the dataframes to their numeric equivalents
     print("Transforming tokens to numeric")
-    df_train['numeric'] = df_train['tokens'].apply(lambda tokens: [vocabulary[token] for token in tokens])
-    df_test['numeric'] = df_test['tokens'].apply(lambda tokens: [vocabulary[token] for token in tokens])
+    df_train['numeric'] = df_train['tokens'].apply(lambda tokens: [vocabulary.get(token, vocabulary["<UNK>"]) for token in tokens])
+    df_test['numeric'] = df_test['tokens'].apply(lambda tokens: [vocabulary.get(token, vocabulary["<UNK>"]) for token in tokens])
     print("Finished transforming tokens to numeric")
     # save with numeric versions of tokens
     if not found:
@@ -91,28 +100,29 @@ if __name__ == '__main__':
     print("Creating model")
     vocab_size = len(vocabulary)
     model_exists = does_file_exist("task1/model/model.pth")
-    model = MyRnn(vocab_dim=vocab_size, output_size=vocab_size, embedding_dim=100, n_layers=2, dropout=0.5,
-                  hidden_size=100)
     if model_exists:
-        model.load_state_dict(torch.load("task1/model/model.pth"))
+        model = torch.load("task1/model/model.pth")
+    else:
+        model = MyRnn(vocab_dim=vocab_size, output_size=vocab_size, embedding_dim=100, n_layers=2, dropout=0.5,
+                      hidden_size=100)
     print("Finished creating model")
     # move model to gpu if available
     print("Moving model to device")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     print("Finished moving model to device: ", device)
-    # train the model
+    # if the model doesn't exist generate a new one
     if not model_exists:
+        # train the model
         print("Training model")
         epochs = 8
         optimizer = optim.Adam(model.parameters(), lr=0.0009)
         loss_function = nn.CrossEntropyLoss()
         model, train_accuracies, train_losses, validation_accuracies, validation_losses \
             = train_my_rnn(model, train_dataloader, validation_dataloader, loss_function, optimizer, epochs, device)
-        torch.save(model.state_dict(), "task1/model/model.pth")
+        torch.save(model, "task1/model/model.pth")
         print("Finished training model")
-    # plot the results
-    if not model_exists:
+        # plot the results
         print("Plotting results")
         plt.plot(train_accuracies, label="Train")
         plt.plot(validation_accuracies, label="Validation")

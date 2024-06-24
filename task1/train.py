@@ -39,7 +39,7 @@ def train_my_rnn(model: MyRnn, train_dataloader: DataLoader, validation_dataload
             batch_data = batch_data.to(device)
             # get the predictions
             outputs: Tensor
-            outputs, _ = model((batch_lengths, batch_data), model.create_hidden(train_dataloader.batch_size, device))
+            outputs, _ = model((batch_lengths, batch_data), model.create_hidden(train_dataloader.batch_size, device), predict=False)
             # calculate the loss
             packed = pack_padded_sequence(batch_data, batch_lengths, batch_first=True, enforce_sorted=False)
             unpacked, batch_lengths = pad_packed_sequence(packed, batch_first=True)
